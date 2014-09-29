@@ -406,7 +406,10 @@ int main (int argc, char *argv[], char *environ[])
 			close (pspair.sfd);
 	}
 
-	setuid (getuid ());
+	if (!setuid (getuid ())) {
+		fprintf(stderr,"setuid failed\n");
+	}
+
 
 	memset (&sawinch, 0, sizeof sawinch);
 	sawinch.sa_handler = newwinsize;
@@ -520,7 +523,9 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 #endif
 	(void) ioctl (0, TIOCSWINSZ, &winorig);
 
-	setuid (getuid ());
+	if (!setuid (getuid ())) {
+		fprintf(stderr,"setuid failed\n");
+	}
 
 	strncpy (newargv, user.shell.ptr, BUFSIZ - 1);
 
