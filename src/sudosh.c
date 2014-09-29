@@ -406,8 +406,7 @@ int main (int argc, char *argv[], char *environ[])
 			close (pspair.sfd);
 	}
 
-	if (!setuid (getuid ())) {
-		fprintf(stderr,"setuid failed\n");
+	if (setuid (getuid ())) {
 	}
 
 
@@ -523,8 +522,7 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 #endif
 	(void) ioctl (0, TIOCSWINSZ, &winorig);
 
-	if (!setuid (getuid ())) {
-		fprintf(stderr,"setuid failed\n");
+	if (setuid (getuid ())) {
 	}
 
 	strncpy (newargv, user.shell.ptr, BUFSIZ - 1);
