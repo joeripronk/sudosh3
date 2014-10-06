@@ -20,12 +20,13 @@
 #include "super.h"
 #include "struct.h"
 #include "getopt.h"
+#include <linux/fs.h>
 
 #ifndef SIGCHLD
 #define SIGCHLD	SIGCLD
 #endif
 
-#define WRITE(a, b, c) do_write(a, b, c, __FILE__, __LINE__)
+#define DO_WRITE(a, b, c) do_write(a, b, c, __FILE__, __LINE__)
 
 typedef enum {false=0, true=1} bool;
 
@@ -148,7 +149,7 @@ int main (int argc, char *argv[], char *environ[])
 		loginshell = 1;
 
 	/* Who are you? */
-	user.pw = getpwuid ((uid_t) geteuid ());
+	user.pw = getpwuid ((uid_t) getuid ());
 
 	if (user.pw == NULL) {
 		fprintf (stderr, "I do not know who you are.	Stopping.\n");
@@ -353,9 +354,10 @@ int main (int argc, char *argv[], char *environ[])
 			ttyname (0), user.shell.ptr);
 
 	char ttyFather[BUFSIZ];
+	int flags=0;
 	snprintf (ttyFather, strlen(ttyname(0))+12,	"TTY_SUDOSH=%s", ttyname(0));
 
-	if ((script.fd = open (script.name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
+	if ((script.fd = open (script.name, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
 		perror (script.name);
 		bye (EXIT_FAILURE);
 	}
@@ -365,17 +367,29 @@ int main (int argc, char *argv[], char *environ[])
 		exit (EXIT_FAILURE);
 	}
 
-	if ((timing.fd = open (timing.name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
+	if (!ioctl(script.fd, FS_IOC_GETFLAGS, &flags)) {
+		flags|=FS_APPEND_FL;
+		if (ioctl(script.fd, FS_IOC_SETFLAGS, &flags)) {
+		}
+	} 
+
+	if ((timing.fd = open (timing.name, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
 		perror (timing.name);
 		bye (EXIT_FAILURE);
 	}
+
+	if (!ioctl(timing.fd, FS_IOC_GETFLAGS, &flags)) {
+          flags|=FS_APPEND_FL;
+	  if (ioctl(timing.fd, FS_IOC_SETFLAGS, &flags)) {
+          }
+        } 
 
 	if (fstat (timing.fd, &timing.stat) == -1) {
 		perror ("fstat timing.fd");
 		exit (EXIT_FAILURE);
 	}
 
-	if ((input.fd = open (input.name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
+	if ((input.fd = open (input.name, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR)) == -1) {
 		perror (input.name);
 		bye (EXIT_FAILURE);
 	}
@@ -383,6 +397,12 @@ int main (int argc, char *argv[], char *environ[])
 	if (fstat (input.fd, &input.stat) == -1) {
 		perror ("fstat input.fd");
 		exit (EXIT_FAILURE);
+	}
+
+	if (!ioctl(input.fd, FS_IOC_GETFLAGS, &flags)) {
+		flags|=FS_APPEND_FL;
+		if (ioctl(input.fd, FS_IOC_SETFLAGS, &flags)) {
+		}
 	}
 
 	if (sudosh_option.priority!=-1)
@@ -406,7 +426,8 @@ int main (int argc, char *argv[], char *environ[])
 			close (pspair.sfd);
 	}
 
-	setuid (getuid ());
+	if (setuid (getuid ())) {
+	}
 
 	memset (&sawinch, 0, sizeof sawinch);
 	sawinch.sa_handler = newwinsize;
@@ -520,7 +541,8 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 #endif
 	(void) ioctl (0, TIOCSWINSZ, &winorig);
 
-	setuid (getuid ());
+	if (setuid (getuid ())) {
+	}
 
 	strncpy (newargv, user.shell.ptr, BUFSIZ - 1);
 
@@ -601,9 +623,9 @@ static int process(bool blockSelect)
 
 				newtime = tv.tv_sec + (double) tv.tv_usec / 1000000;
 
-				WRITE (1, &iobuf, n);
+				DO_WRITE (1, &iobuf, n);
 
-				script.bytes += WRITE (script.fd, &iobuf, n);
+				script.bytes += DO_WRITE (script.fd, &iobuf, n);
 
 				if (nInput > 0) {
 
@@ -617,7 +639,7 @@ static int process(bool blockSelect)
 
 								if ( ! isprint(ibuf[i]) || isspace(ibuf[i])) {
 
-									input.bytes += WRITE (input.fd, &ibuf[i], 1);
+									input.bytes += DO_WRITE (input.fd, &ibuf[i], 1);
 									nInputTmp++;
 								}
 							}
@@ -626,14 +648,14 @@ static int process(bool blockSelect)
 
 							break;
 						default:
-							input.bytes += WRITE (input.fd, &ibuf, nInput);
+							input.bytes += DO_WRITE (input.fd, &ibuf, nInput);
 							break;
 					}
 				}
 
 				snprintf (timing.str, BUFSIZ - 1, "%f %i %i %i %i\n", newtime - oldtime, n, nInput,winorig.ws_col,winorig.ws_row);
 
-				timing.bytes += WRITE (timing.fd, &timing.str, strlen (timing.str));
+				timing.bytes += DO_WRITE (timing.fd, &timing.str, strlen (timing.str));
 
 				nInput = 0;
 
@@ -645,7 +667,7 @@ static int process(bool blockSelect)
 
 			if ((n = read (0, ibuf, sizeof (ibuf))) > 0) {
 
-				WRITE (pspair.mfd, &ibuf, n);
+				DO_WRITE (pspair.mfd, &ibuf, n);
 
 				nInput = n;
 			}
@@ -698,9 +720,32 @@ static void rawmode (int ttyfd)
 
 static void bye (int signum)
 {
+	int flags=0;
 #ifdef TCSETS
 	(void) ioctl (0, TCSETS, &termorig);
 #endif
+
+        if (!ioctl(timing.fd, FS_IOC_GETFLAGS, &flags)) {
+		flags&=~(FS_APPEND_FL);
+                flags|=FS_IMMUTABLE_FL;
+                if (ioctl(timing.fd, FS_IOC_SETFLAGS, &flags)) {
+                }
+        }
+
+        if (!ioctl(input.fd, FS_IOC_GETFLAGS, &flags)) {
+		flags&=~(FS_APPEND_FL);
+                flags|=FS_IMMUTABLE_FL;
+                if (ioctl(input.fd, FS_IOC_SETFLAGS, &flags)) {
+                }
+        }
+
+
+        if (!ioctl(script.fd, FS_IOC_GETFLAGS, &flags)) {
+		flags&=~(FS_APPEND_FL);
+                flags|=FS_IMMUTABLE_FL;
+                if (ioctl(script.fd, FS_IOC_SETFLAGS, &flags)) {
+                }
+        }
 
 	close (timing.fd);
 	close (script.fd);
