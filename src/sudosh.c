@@ -275,7 +275,7 @@ int main (int argc, char *argv[], char *environ[])
 		exit(EXIT_FAILURE);
 	}
 
-	user.pw = getpwuid ((uid_t) geteuid ());
+	user.pw = getpwuid ((uid_t) getuid ());
 
 	snprintf (user.home.str, BUFSIZ - 1, "HOME=%s", user.pw->pw_dir);
 	strncpy (user.to_home.str, user.pw->pw_dir, BUFSIZ - 1);
@@ -428,10 +428,6 @@ int main (int argc, char *argv[], char *environ[])
 
 	if (setuid (getuid ())) {
 	}
-<<<<<<< HEAD
-=======
-
->>>>>>> 373e6f32dfa424d805cda65c44489be7c0189a29
 
 	memset (&sawinch, 0, sizeof sawinch);
 	sawinch.sa_handler = newwinsize;
