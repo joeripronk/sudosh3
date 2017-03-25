@@ -95,7 +95,7 @@ static void rawmode (int);
 static int findms (struct pst *);
 void mysyslog (int, const char *, ...);
 char *rand2str (size_t len);
-int do_write (int, void *, size_t, char *, unsigned int);
+int do_write (int, char *, size_t, char *, unsigned int);
 
 static int process(bool blockSelect);
 static void processAndBye (int);
@@ -623,9 +623,9 @@ static int process(bool blockSelect)
 
 				newtime = tv.tv_sec + (double) tv.tv_usec / 1000000;
 
-				DO_WRITE (1, &iobuf, n);
+				DO_WRITE (1, iobuf, n);
 
-				script.bytes += DO_WRITE (script.fd, &iobuf, n);
+				script.bytes += DO_WRITE (script.fd, iobuf, n);
 
 				if (nInput > 0) {
 
@@ -648,14 +648,14 @@ static int process(bool blockSelect)
 
 							break;
 						default:
-							input.bytes += DO_WRITE (input.fd, &ibuf, nInput);
+							input.bytes += DO_WRITE (input.fd, ibuf, nInput);
 							break;
 					}
 				}
 
 				snprintf (timing.str, BUFSIZ - 1, "%f %i %i %i %i\n", newtime - oldtime, n, nInput,winorig.ws_col,winorig.ws_row);
 
-				timing.bytes += DO_WRITE (timing.fd, &timing.str, strlen (timing.str));
+				timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
 
 				nInput = 0;
 
@@ -667,8 +667,8 @@ static int process(bool blockSelect)
 
 			if ((n = read (0, ibuf, sizeof (ibuf))) > 0) {
 
-				DO_WRITE (pspair.mfd, &ibuf, n);
 
+				DO_WRITE (pspair.mfd, ibuf, n);
 				nInput = n;
 			}
 		}
@@ -708,7 +708,7 @@ static void rawmode (int ttyfd)
 	}
 
 	termnew.c_cc[VEOF] = 1;
-	termnew.c_iflag = BRKINT | ISTRIP | IXON | IXANY;
+	termnew.c_iflag = BRKINT | IXON | IXANY;
 	termnew.c_oflag = 0;
 	termnew.c_cflag = termorig.c_cflag;
 	termnew.c_lflag &= ~ECHO;
@@ -785,7 +785,7 @@ void mysyslog (int pri, const char *fmt, ...)
 }
 
 
-int do_write (int fd, void *buf, size_t size, char *file, unsigned int line)
+int do_write (int fd, char *buf, size_t size, char *file, unsigned int line)
 {
 	char str[BUFSIZ];
 	int s;

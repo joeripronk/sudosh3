@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.5)
-AC_INIT(sudosh3, [3.2.3], [josh@shortcutsolutions.net])
+AC_INIT(sudosh3, [3.2.4], [joeri.pronk@adyen.com])
 AC_CONFIG_SRCDIR([src/])
 AC_CANONICAL_SYSTEM
 
@@ -10,7 +10,7 @@ AC_CANONICAL_SYSTEM
 test "$sysconfdir" = '${prefix}/etc' && sysconfdir='/etc'
 
 AC_CONFIG_HEADER([config.h])
-AM_INIT_AUTOMAKE(sudosh3, 3.2.3)
+AM_INIT_AUTOMAKE(sudosh3, 3.2.4)
 AC_PROG_CC
 AC_PATH_PROG(PERL, perl)
 

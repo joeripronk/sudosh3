@@ -1,7 +1,7 @@
 Summary: Complete logging for sudo
 Name: sudosh
-Version: 3.2.3
-Release: 4
+Version: 3.2.4
+Release: 6
 License: GPL
 Group: Applications/System
 URL: http://sudosh.sourceforge.net
@@ -48,6 +48,11 @@ chattr +a /var/log/sudosh
 %attr(4711,root,root) /usr/bin/sudosh
 
 %changelog
+* Sat Mar 25 2017 Joeri Pronk <joeri.pronk@adyen.com>
+- remove high bit stripping for multibyte chars
+* Tue Oct 07 2014 Joeri Pronk <joeri.pronk@adyen.com>
+- fix homedir for setuid root sudosh
+- remove escape characters from sudosh-replay dump
 * Mon Oct 06 2014 Joeri Pronk <joeri.pronk@adyen.com>
 - Add append_only flag, to avoid file truncation/deletion by non-root users
 * Sat Sep 20 2014 Joeri Pronk <joeri.pronk@adyen.com>
