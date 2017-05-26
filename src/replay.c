@@ -20,6 +20,8 @@
 #include "super.h"
 #include "struct.h"
 
+extern void write2output(const char *oBuffer, size_t oCharCount);
+
 #define LL() fprintf(stderr, "[%s, line %i]: ", __FILE__, __LINE__)
 
 struct s_file {
@@ -225,11 +227,11 @@ int main(int argc, char **argv, char **environ)
 						script, strerror(errno), errno);
 				exit(EXIT_FAILURE);
 			}
-
-			while (fread(&buffer, 1, BUFSIZ, f_script))
-				fputs(buffer, stdout);
-
+			size_t count=0;
+			while ((count=fread(&buffer, 1, BUFSIZ, f_script)))
+				write2output(buffer,count);
 			fclose(f_script);
+			write2output("\r\n",2);
 
 		}
 		else
@@ -280,7 +282,6 @@ int main(int argc, char **argv, char **environ)
 		if(!strcmp(type, "interactive")) {
 			char *ptr;
 			FILE *f;
-			char *ret;
 			s = session_malloc();
 
 			s->secs = 0;
@@ -294,7 +295,10 @@ int main(int argc, char **argv, char **environ)
 				exit(EXIT_FAILURE);
 			}
 
-			ret=fgets(s->id, BUFSIZ - 1, f);
+			if (!fgets(s->id, BUFSIZ - 1, f)) {
+				fprintf(stderr, "fgets failed, should not happen");
+			}
+
 			fclose(f);
 
 			ptr = strchr(s->id, '\n');
@@ -423,7 +427,6 @@ void replay(const char *time, const char *script, double div, double maxwait,int
 	int r = 0;
 	int row = 0;
 	int col = 0;
-	long sec, nsec;
 	struct winsize win;
 	struct winsize winorig;
 	char buffer[BUFSIZ];
@@ -456,8 +459,6 @@ void replay(const char *time, const char *script, double div, double maxwait,int
 		exit(EXIT_FAILURE);
 	}
 	clock_gettime(CLOCK_MONOTONIC, &waitforit);
-        sec=waitforit.tv_sec;
-        nsec=waitforit.tv_nsec;
 
 	for (s_time.line = 1; fgets(buffer, BUFSIZ - 1, s_time.f); s_time.line++) {
 
@@ -614,7 +615,7 @@ void show_sessions(void)
 
 session *sort_list(session * list)
 {
-	session *p, *q, *e, *tail, *oldhead;
+	session *p, *q, *e, *tail;
 	int insize, nmerges, psize, qsize, i;
 
 	if (!list)
@@ -625,7 +626,6 @@ session *sort_list(session * list)
 	while (1) {
 
 		p = list;
-		oldhead = list;
 		list = (session *) 0;
 		tail = (session *) 0;
 		nmerges = 0;

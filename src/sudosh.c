@@ -21,6 +21,7 @@
 #include "struct.h"
 #include "getopt.h"
 #include <linux/fs.h>
+#include <sys/wait.h>
 
 #ifndef SIGCHLD
 #define SIGCHLD	SIGCLD
@@ -82,6 +83,7 @@ struct s_option sudosh_option;
 
 static char *progname;
 char start_msg[BUFSIZ];
+bool child_dead = 1;
 
 int loginshell = 0;
 
@@ -120,7 +122,6 @@ int main (int argc, char *argv[], char *environ[])
 	char c_str[BUFSIZ];
 	char c_command[BUFSIZ];
 	char *p = NULL;
-	char *c_args = NULL;
 	char *rand = rand2str (16);
 	time_t now = time ((time_t *) NULL);
 	struct stat s;
@@ -178,12 +179,10 @@ int main (int argc, char *argv[], char *environ[])
 				strncpy (user.from, user.pw->pw_name, BUFSIZ - 1);
 				strncpy (c_str, optarg, BUFSIZ - 1);
 				strncpy (c_command, optarg, BUFSIZ -1);
-				c_args = (char *) strchr (optarg, ' ');
 				p=strchr(c_str, ' ');
 
 				if (p) {
 					p[0]=0;
-				//	fprintf(stderr,"args=%s\n",c_args);
 				}
 
 				//if (c_str) {
@@ -425,6 +424,10 @@ int main (int argc, char *argv[], char *environ[])
 		default:
 			close (pspair.sfd);
 	}
+	child_dead = 0;
+
+	if (sudosh_option.priority!=-1)
+		openlog (progname, 0, sudosh_option.facility);
 
 	if (setuid (getuid ())) {
 	}
@@ -435,21 +438,13 @@ int main (int argc, char *argv[], char *environ[])
 	sigaction (SIGWINCH, &sawinch, (struct sigaction *) 0);
 
 	memset (&saterm, 0, sizeof saterm);
-/*
- * If there are some info to write,
- * we have to write them all
- */
 	saterm.sa_handler = processAndBye;
-//  saterm.sa_handler = bye;
-	sigaction (SIGTERM, &sawinch, (struct sigaction *) 0);
+	sigaction (SIGTERM, &saterm, (struct sigaction *) 0);
 
 	memset (&sachild, 0, sizeof sachild);
-/*
- * If there are some info to write,
- * we have to write them all
- */
+
 	sachild.sa_handler = processAndBye;
-//  sachild.sa_handler = bye;
+	sachild.sa_flags = SA_RESTART|SA_NOCLDSTOP;
 	sigaction (SIGCHLD, &sachild, (struct sigaction *) 0);
 
 	oldtime = time (NULL);
@@ -580,10 +575,10 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 
 static int process(bool blockSelect)
 {
-	int n      = 0;
 	int nInput = 0;
 	int nInputTmp = 0;
 	int i = 0;
+	int n;
 	double newtime;
 	struct timeval tv;
 	struct timeval* timeOut = NULL;
@@ -593,13 +588,13 @@ static int process(bool blockSelect)
 
 	if ( ! blockSelect) {
 		timeOut = malloc(sizeof(struct timeval));
-		timeOut->tv_sec  = 0;
+		timeOut->tv_sec  = 1;
 		timeOut->tv_usec = 0;
 	}
 
 	do {
 		fd_set readfds;
-
+		n = 0;
 		FD_ZERO (&readfds);
 		FD_SET (pspair.mfd, &readfds);
 		FD_SET (0, &readfds);
@@ -607,7 +602,11 @@ static int process(bool blockSelect)
 		if (select (pspair.mfd + 1, &readfds, (fd_set*) 0, (fd_set*) 0, timeOut) < 0) {
 
 			if (errno == EINTR) {
-				continue;
+				if (child_dead) {
+					break;
+				} else {
+					continue;
+				}
 			}
 
 			perror ("select");
@@ -672,8 +671,7 @@ static int process(bool blockSelect)
 				nInput = n;
 			}
 		}
-	}
-	while (n > 0);
+	} while (n > 0);
 
 	if (timeOut != NULL) {
 		free (timeOut);
@@ -685,8 +683,9 @@ static int process(bool blockSelect)
 
 static void processAndBye (int signum)
 {
+	child_dead=1;
+	while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
 	process(false);
-	bye(signum);
 }
 
 static void rawmode (int ttyfd)
@@ -751,9 +750,11 @@ static void bye (int signum)
 	close (script.fd);
 	close (input.fd);
 
-	if (sudosh_option.priority!=-1)
+	if (sudosh_option.priority!=-1) {
 		mysyslog (sudosh_option.priority, "stopping session for %s as %s, tty %s, shell %s",
 			user.from, user.to, ttyname(0), user.shell.ptr);
+		closelog();
+	}
 	exit (signum);
 }
 
@@ -779,7 +780,6 @@ void mysyslog (int pri, const char *fmt, ...)
 	va_start (ap, fmt);
 	vsnprintf (buf, sizeof (buf), fmt, ap);
 
-	openlog (progname, 0, sudosh_option.facility);
 	syslog (pri, "%s", buf);
 	closelog ();
 }

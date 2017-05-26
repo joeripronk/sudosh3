@@ -54,7 +54,8 @@ am_sudosh_OBJECTS = sudosh.$(OBJEXT) rand.$(OBJEXT) parse.$(OBJEXT) \
 sudosh_OBJECTS = $(am_sudosh_OBJECTS)
 sudosh_LDADD = $(LDADD)
 am_sudosh_replay_OBJECTS = replay.$(OBJEXT) getopt.$(OBJEXT) \
-	string.$(OBJEXT) parse.$(OBJEXT) util.$(OBJEXT)
+	string.$(OBJEXT) parse.$(OBJEXT) util.$(OBJEXT) \
+	write2output.$(OBJEXT)
 sudosh_replay_OBJECTS = $(am_sudosh_replay_OBJECTS)
 sudosh_replay_DEPENDENCIES =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
@@ -172,7 +173,7 @@ top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 sudosh_SOURCES = sudosh.c rand.c parse.c string.c getopt.h  struct.h  super.h util.c
-sudosh_replay_SOURCES = replay.c getopt.c getopt.h string.c parse.c  util.c
+sudosh_replay_SOURCES = replay.c getopt.c getopt.h string.c parse.c  util.c write2output.c
 sudosh_replay_LDADD = -lrt
 EXTRA_DIST = sudosh.conf
 all: all-am
@@ -268,6 +269,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sudosh.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/util.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write2output.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

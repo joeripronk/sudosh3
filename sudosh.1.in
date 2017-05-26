@@ -2,7 +2,7 @@
 .\" groff -man -Tascii sudosh.1
 .\"
 
-.TH SUDOSH 1 "December 21th 2007" @VERSION@ "User Manuals"
+.TH SUDOSH 1 "May 26th 2017" @VERSION@ "User Manuals"
 .SH NAME
 @PACKAGE_NAME@ \- works like a VCR and records shell sessions.
 .SH SYNOPSIS

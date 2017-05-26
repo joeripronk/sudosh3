@@ -2,7 +2,7 @@
 .\" groff -man -Tascii sudosh.1
 .\"
 
-.TH SUDOSH.CONF 5 "December 21th 2007" @VERSION@ "User Manuals"
+.TH SUDOSH.CONF 5 "May 26th 2017" @VERSION@ "User Manuals"
 .SH NAME
 sudosh.conf \- configuration file for sudosh
 .SH DESCRIPTION
