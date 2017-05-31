@@ -605,6 +605,7 @@ static int process(bool blockSelect)
 				if (child_dead) {
 					break;
 				} else {
+					n=1; // insert fake news, otherwise the loop ends
 					continue;
 				}
 			}
