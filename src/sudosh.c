@@ -720,7 +720,7 @@ static void rawmode (int ttyfd)
 
 static void bye (int signum)
 {
-	int flags=0,exitcode=0,status=0,pid=0;
+	int flags=0,status=0;
 #ifdef TCSETS
 	(void) ioctl (0, TCSETS, &termorig);
 #endif
@@ -756,14 +756,12 @@ static void bye (int signum)
 			user.from, user.to, ttyname(0), user.shell.ptr);
 		closelog();
 	}
-	if (pid=waitpid(child_pid, &status, 0)==-1) {
+	if (waitpid(child_pid, &status, 0)==-1) {
 		perror("waitpid() failed");
 		exit(EXIT_FAILURE);
 	}
 	if (WIFEXITED(status)) {
-		exitcode=WEXITSTATUS(status);
-		printf("%d-%d Exit status was %d\n",child_pid,pid,exitcode);
-		exit(exitcode);
+		exit(WEXITSTATUS(status));
 	} else {
 		exit(signum);
 	}
