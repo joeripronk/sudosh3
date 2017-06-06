@@ -84,6 +84,7 @@ struct s_option sudosh_option;
 static char *progname;
 char start_msg[BUFSIZ];
 bool child_dead = 1;
+pid_t child_pid=-1;
 
 int loginshell = 0;
 
@@ -414,7 +415,7 @@ int main (int argc, char *argv[], char *environ[])
 		bye (EXIT_FAILURE);
 	}
 
-	switch (fork ()) {
+	switch (child_pid=fork ()) {
 		case 0:
 			close (pspair.mfd);
 			prepchild (&pspair, ttyFather);
@@ -685,7 +686,6 @@ static int process(bool blockSelect)
 static void processAndBye (int signum)
 {
 	child_dead=1;
-	while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
 	process(false);
 }
 
@@ -720,7 +720,7 @@ static void rawmode (int ttyfd)
 
 static void bye (int signum)
 {
-	int flags=0;
+	int flags=0,exitcode=0,status=0,pid=0;
 #ifdef TCSETS
 	(void) ioctl (0, TCSETS, &termorig);
 #endif
@@ -756,7 +756,17 @@ static void bye (int signum)
 			user.from, user.to, ttyname(0), user.shell.ptr);
 		closelog();
 	}
-	exit (signum);
+	if (pid=waitpid(child_pid, &status, 0)==-1) {
+		perror("waitpid() failed");
+		exit(EXIT_FAILURE);
+	}
+	if (WIFEXITED(status)) {
+		exitcode=WEXITSTATUS(status);
+		printf("%d-%d Exit status was %d\n",child_pid,pid,exitcode);
+		exit(exitcode);
+	} else {
+		exit(signum);
+	}
 }
 
 static void newwinsize (int signum)
