@@ -1,6 +1,6 @@
 Summary: Complete logging for sudo
 Name: sudosh
-Version: 3.2.5
+Version: 3.3.0
 Release: 5 
 License: GPL
 Group: Applications/System
@@ -23,8 +23,8 @@ make
 %install
 rm -rf $RPM_BUILD_ROOT
 %makeinstall
-install -d $RPM_BUILD_ROOT/etc/profile.d/
 install -m 0733 -d $RPM_BUILD_ROOT/var/log/sudosh
+#install -d $RPM_BUILD_ROOT/etc/profile.d/
 #install $RPM_BUILD_DIR/%{name}-%{version}/contrib/sudosh.sh $RPM_BUILD_ROOT/etc/profile.d/
 
 %clean
@@ -48,6 +48,26 @@ chattr +a /var/log/sudosh
 %attr(4711,root,root) /usr/bin/sudosh
 
 %changelog
+* Fri Oct 18 2019 Joeri Pronk <joeri.pronk@adyen.com>
+- merge reads to avoid partial (escape code) captures
+  and to reduce time filesize
+- only write term dimensions on a terminal resize
+- fix compile warnings for snprintf truncations
+- add header and tailer for time files
+  includes TERM and LC_* environment
+- fgets will now always read until an EOL
+  discarding any additional unparsed data
+- fix sudosh-replay for larger replay sizes
+  created by merging reads
+- make sscanf more tolerant on extra data
+- -c arg now supports and should use complete path
+  it automatically finds commands using basename:
+  -c arg /usr/bin/rsync
+  will be resolved to /usr/bin/rsync from rsync  
+- will also log command input/output when it's a tty
+- -c arg no longer uses a shell to execute the command
+  closing the hole for using shell escapes
+- update to newer autoconf/configure
 * Fri May 26 2017 Joeri Pronk <joeri.pronk@adyen.com>
 - fix child exit, but sudosh does not exit
 * Tue Oct 07 2014 Joeri Pronk <joeri.pronk@adyen.com>

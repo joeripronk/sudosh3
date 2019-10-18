@@ -16,6 +16,8 @@
  * warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
  * PURPOSE.	See the Open Software License for details.
  */
+/* following define is needed for execvpe */
+#define _GNU_SOURCE
 
 #include "super.h"
 #include "struct.h"
@@ -45,7 +47,7 @@ struct pst
 struct s_file
 {
 	int fd;
-	int bytes;
+	unsigned long bytes;
 	struct stat stat;
 	struct stat cstat;
 	struct stat tstat;
@@ -93,14 +95,14 @@ double oldtime;
 
 static void bye (int);
 static void newwinsize (int);
-static void prepchild (struct pst *, char ttyFather[BUFSIZ]);
+static void prepchild (struct pst *, char ttyFather[BUFSIZ],char *cmd,char **args);
 static void rawmode (int);
 static int findms (struct pst *);
 void mysyslog (int, const char *, ...);
 char *rand2str (size_t len);
 int do_write (int, char *, size_t, char *, unsigned int);
 
-static int process(bool blockSelect);
+static int process();
 static void processAndBye (int);
 
 extern void parse (option *, const char *);
@@ -111,17 +113,22 @@ extern char *ptsname (int);
 
 extern char *optarg;
 extern int optind;
-
+char **buildargv (char *input);
+void freeargv(char **argv);
+char **env=NULL;
+char * find_allowed_command(char *cmd);
 int main (int argc, char *argv[], char *environ[])
 {
 	int result = EXIT_SUCCESS;
 //	int n = 1;
 	int valid = -1;
+	char *cmd=NULL;
+	char **args=NULL;
 	//int found = FALSE;
 //	char iobuf[BUFSIZ];
 	char sysconfdir[BUFSIZ];
-	char c_str[BUFSIZ];
-	char c_command[BUFSIZ];
+//	char c_str[BUFSIZ];
+//	char c_command[BUFSIZ]="";
 	char *p = NULL;
 	char *rand = rand2str (16);
 	time_t now = time ((time_t *) NULL);
@@ -136,6 +143,7 @@ int main (int argc, char *argv[], char *environ[])
  */
 	struct stat ttybuf;
 	int c;
+	env=environ;
 
 	user.vshell = NULL;
 	user.shell.ptr = NULL;
@@ -178,54 +186,53 @@ int main (int argc, char *argv[], char *environ[])
 			case 'c':
 			//	fprintf(stderr,"optarg is [%s]\n",optarg);
 				strncpy (user.from, user.pw->pw_name, BUFSIZ - 1);
-				strncpy (c_str, optarg, BUFSIZ - 1);
-				strncpy (c_command, optarg, BUFSIZ -1);
-				p=strchr(c_str, ' ');
+//				strncpy (c_str, optarg, BUFSIZ - 1);
+//				strncpy (c_command, optarg, BUFSIZ -1);
+				//p=strchr(c_str, ' ');
 
 				if (p) {
 					p[0]=0;
 				}
 
-				//if (c_str) {
-				//	fprintf(stderr,"Testing c\n");
-					// Make sure that c_str is in argallow
-					char argtest[BUFSIZ];
+				args=buildargv(optarg);
+				cmd=find_allowed_command(*args);
+				if (cmd!=NULL) {
+					FILE *f;
+					snprintf (script.name, (size_t) BUFSIZ - 1,
+							FILENAME_FORMAT,
+							sudosh_option.logdir, user.from,
+							sudosh_option.fdl, user.to, sudosh_option.fdl,
+							"interactive", sudosh_option.fdl, now,
+							sudosh_option.fdl,
+							rand);
 
-					sprintf(argtest,"$%.100s$",c_str);
-				//	fprintf(stderr,"Testing for %s\n",argtest);
+					f = fopen (script.name, "w");
 
-					if (strstr(sudosh_option.argallow,argtest)!=NULL) {
-
-						FILE *f;
-						snprintf (script.name, (size_t) BUFSIZ - 1,
-								"%s/%s%c%s%cinteractive%c%i%c%s",
-								sudosh_option.logdir, user.from,
-								sudosh_option.fdl, user.to, sudosh_option.fdl,
-								sudosh_option.fdl, (int) now, sudosh_option.fdl,
-								rand);
-
-						f = fopen (script.name, "w");
-
-						if (f == (FILE *) 0) {
-							fprintf (stderr, "%.100s: %.100s (%i)\n", script.name,
-									 strerror (errno), errno);
-							exit (EXIT_FAILURE);
-						}
-
-						fprintf (f, "%.256s\n", c_str);
-						fclose (f);
-
-						execl ("/bin/sh", "sh", "-c", c_command,	(char *) 0);
-						exit (EXIT_SUCCESS);
-						break;
-					}
-					else {
-						fprintf (stderr, "\"%s\" isn't allowed to be executed.\n",
-								 c_str);
+					if (f == (FILE *) 0) {
+						fprintf (stderr, "%.100s: %.100s (%i)\n", script.name,
+								 strerror (errno), errno);
 						exit (EXIT_FAILURE);
-						break;
 					}
-				//}
+
+					fprintf (f, "%s\n", optarg);
+					fclose (f);
+
+					if (!isatty(0)) {
+						//execl ("/bin/sh", "sh", "-c", c_command,	(char *) 0);
+						execvp (cmd,args);
+						freeargv(args);
+						exit (EXIT_FAILURE);
+					} else {
+						fprintf(stderr,"you are a terminal %s %s!\n",cmd,*args);
+//						exit (EXIT_FAILURE);
+					}
+					break;
+				} else {
+					fprintf (stderr, "\"%s\" isn't allowed to be executed.\n",
+							 *args);
+					exit (EXIT_FAILURE);
+					break;
+				}
 				break;
 			case 'h':
 			case '?':
@@ -336,21 +343,21 @@ int main (int argc, char *argv[], char *environ[])
 	timing.bytes = 0;
 	input.bytes = 0;
 
-	snprintf (script.name, (size_t) BUFSIZ - 1, "%s/%s%c%s%cscript%c%i%c%s",
+	snprintf (script.name, (size_t) BUFSIZ - 1, FILENAME_FORMAT,
 			sudosh_option.logdir, user.from, sudosh_option.fdl, user.to,
-			sudosh_option.fdl, sudosh_option.fdl, (int) now,
+			sudosh_option.fdl, "script", sudosh_option.fdl, now,
 			sudosh_option.fdl, rand);
-	snprintf (timing.name, (size_t) BUFSIZ - 1, "%s/%s%c%s%ctime%c%i%c%s",
+	snprintf (timing.name, (size_t) BUFSIZ - 1, FILENAME_FORMAT,
 			sudosh_option.logdir, user.from, sudosh_option.fdl, user.to,
-			sudosh_option.fdl, sudosh_option.fdl, (int) now,
+			sudosh_option.fdl, "time", sudosh_option.fdl, now,
 			sudosh_option.fdl, rand);
-	snprintf (input.name, (size_t) BUFSIZ - 1, "%s/%s%c%s%cinput%c%i%c%s",
+	snprintf (input.name, (size_t) BUFSIZ - 1, FILENAME_FORMAT,
 			sudosh_option.logdir, user.from, sudosh_option.fdl, user.to,
-			sudosh_option.fdl, sudosh_option.fdl, (int) now,
+			sudosh_option.fdl, "input", sudosh_option.fdl, now,
 			sudosh_option.fdl, rand);
 
 	snprintf (start_msg, BUFSIZ - 1,
-			"starting session for %s as %s, tty %s, shell %s", user.from, user.to,
+			"starting session for %.128s as %.128s, tty %.2048s, shell %.2048s", user.from, user.to,
 			ttyname (0), user.shell.ptr);
 
 	char ttyFather[BUFSIZ];
@@ -414,11 +421,21 @@ int main (int argc, char *argv[], char *environ[])
 		perror ("open pty failed");
 		bye (EXIT_FAILURE);
 	}
+        snprintf (timing.str, BUFSIZ - 1, "0 0 0 %i %i 2 ", winorig.ws_col,winorig.ws_row);
+        timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
+	while (*env) {
+		if (strncmp("TERM=",*env,5)==0 || strncmp("LC_",*env,3)==0) {
+			snprintf(timing.str, BUFSIZ - 1,"%s\\n", *env);
+        		timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
+		}
+		*env++;
+	}
+        timing.bytes += DO_WRITE (timing.fd, "\n", 1);
 
 	switch (child_pid=fork ()) {
 		case 0:
 			close (pspair.mfd);
-			prepchild (&pspair, ttyFather);
+			prepchild (&pspair, ttyFather,cmd,args);
 		case -1:
 			perror ("fork failed");
 			bye (EXIT_FAILURE);
@@ -450,7 +467,7 @@ int main (int argc, char *argv[], char *environ[])
 
 	oldtime = time (NULL);
 
-	result = process(true);
+	result = process();
 	bye (result);
 
 	return (0);
@@ -500,9 +517,9 @@ static int findms (struct pst *p)
 	return p->mfd;
 }
 
-static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
+static void prepchild (struct pst *pst, char ttyFather[BUFSIZ],char *cmd,char **args)
 {
-	int i;
+	int i,ret;
 	char *b = NULL;
 	char newargv[BUFSIZ];
 	char *env_list[] = { user.term.str
@@ -547,8 +564,8 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 
 	*b = '-';
 
-	snprintf (user.shell.str, BUFSIZ - 1, "SHELL=%s", user.shell.ptr);
-	snprintf (user.logname.str, BUFSIZ - 1, "LOGNAME=%s", user.to);
+	snprintf (user.shell.str, BUFSIZ - 1, "SHELL=%.2048s", user.shell.ptr);
+	snprintf (user.logname.str, BUFSIZ - 1, "LOGNAME=%.128s", user.to);
 
 	if (!strcmp (user.to, "root"))
 		snprintf (user.path.str, BUFSIZ - 1, "PATH=/sbin:/bin:/usr/sbin:/usr/bin:");
@@ -567,46 +584,102 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ])
 	}
 
 	if (sudosh_option.clearenvironment==0)
-		execl (user.shell.ptr, b, (char *) 0);
-	else
-		execle (user.shell.ptr, b, (char *) 0, env_list);
+		if (cmd) {
+//			execl ("/bin/sh", "sh", "-c", c_command,	(char *) 0);
+			ret=execvpe(cmd,args,env);
+			freeargv(args);
+		} else {
+			ret=execl (user.shell.ptr, b, (char *) 0);
+		}
+	else if (cmd) {
+//			execle ("/bin/sh", "sh", "-c", c_command,	(char *) 0,env_list);
+			ret=execvpe(cmd,args,env_list);
+			freeargv(args);
+		} else {
+			ret=execle (user.shell.ptr, b, (char *) 0, env_list);
+		}
 
-	abort ();
+	exit(EXIT_FAILURE);
+//	abort ();
 }
 
-static int process(bool blockSelect)
+static int process()
 {
-	int nInput = 0;
-	int nInputTmp = 0;
+	size_t nInput = 0;
+	size_t nOutput = 0;
+	size_t nInputTmp = 0;
 	int i = 0;
 	int n;
 	double newtime;
 	struct timeval tv;
 	struct timeval* timeOut = NULL;
-	char ibuf[BUFSIZ];
-	char iobuf[BUFSIZ];
+	struct timeval timeOuts;
+	char ibuf[BUFSIZ+1];
+	char iobuf[BUFSIZ+1];
 	int result = EXIT_SUCCESS;
 
-	if ( ! blockSelect) {
-		timeOut = malloc(sizeof(struct timeval));
-		timeOut->tv_sec  = 1;
-		timeOut->tv_usec = 0;
-	}
-
+	nOutput=0;
+	n=0;
+	int oldcols=-1;
+	int oldrows=-1;
+	size_t nOut=0;
+	size_t nIn=0;
+	int fdsbroken=0;
+	fd_set readfds;
 	do {
-		fd_set readfds;
-		n = 0;
+		if ((nOutput>0 || nInput > 0)  && (nIn<=0 && nOut<=0) ) {
+			if (nInput > 0) {
+				switch (iobuf[0]) {
+					case '\r':
+					case '\n':
+						nInputTmp = 0;
+						for (i = 0; i < nInput; i++) {
+							if ( ! isprint(ibuf[i]) || isspace(ibuf[i])) {
+								input.bytes += DO_WRITE (input.fd, &ibuf[i], 1);
+								nInputTmp++;
+							}
+						}
+						nInput = nInputTmp;
+						break;
+					default:
+						input.bytes += DO_WRITE (input.fd, ibuf, nInput);
+						break;
+				}
+			}
+			if (oldrows!=winorig.ws_row || oldcols!=winorig.ws_col) {
+				oldrows=winorig.ws_row;
+				oldcols=winorig.ws_col;
+				snprintf (timing.str, BUFSIZ - 1, "%f %lu %lu %i %i\n", newtime - oldtime, nOutput, nInput,winorig.ws_col,winorig.ws_row);
+			} else {
+			  	snprintf (timing.str, BUFSIZ - 1, "%f %lu %lu\n", newtime - oldtime, nOutput, nInput);
+			}
+			timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
+			nInput = 0;
+			nOutput=0;
+		       	oldtime = newtime;
+		}
 		FD_ZERO (&readfds);
 		FD_SET (pspair.mfd, &readfds);
 		FD_SET (0, &readfds);
 
-		if (select (pspair.mfd + 1, &readfds, (fd_set*) 0, (fd_set*) 0, timeOut) < 0) {
-
+		if (nOutput>0||nInput>0) {
+			if (nOut==0 && nIn==0) continue;
+			/* if we are reading check if we can read again
+			and add that data to a single timing event */
+			timeOut=&timeOuts;
+	  		timeOut->tv_sec  = 0;
+			timeOut->tv_usec = 10000;
+		} else {
+			/* otherwise we wait until new data arrives */
+			timeOut=NULL;
+		}
+		nOut=0;
+		nIn=0;
+		if ((n=select (pspair.mfd + 1, &readfds, (fd_set*) 0, (fd_set*) 0, timeOut)) < 0) {
 			if (errno == EINTR) {
 				if (child_dead) {
 					break;
 				} else {
-					n=1; // insert fake news, otherwise the loop ends
 					continue;
 				}
 			}
@@ -615,70 +688,31 @@ static int process(bool blockSelect)
 			result = EXIT_FAILURE;
 			break;
 		}
+		/* nothing to read, so process normally again */
+		if (n==0) continue;
 
+		if (nOutput==0 && nInput==0) {
+			gettimeofday ((struct timeval *) &tv, NULL);
+			newtime = tv.tv_sec + (double) tv.tv_usec / 1000000;
+		}
 		if (FD_ISSET (pspair.mfd, &readfds))  {
-
-			if ((n = read (pspair.mfd, iobuf, sizeof (iobuf))) > 0) {
-
-				gettimeofday ((struct timeval *) &tv, NULL);
-
-				newtime = tv.tv_sec + (double) tv.tv_usec / 1000000;
-
-				DO_WRITE (1, iobuf, n);
-
-				script.bytes += DO_WRITE (script.fd, iobuf, n);
-
-				if (nInput > 0) {
-
-					switch (iobuf[0]) {
-						case '\r':
-						case '\n':
-
-							nInputTmp = 0;
-
-							for (i = 0; i < nInput; i++) {
-
-								if ( ! isprint(ibuf[i]) || isspace(ibuf[i])) {
-
-									input.bytes += DO_WRITE (input.fd, &ibuf[i], 1);
-									nInputTmp++;
-								}
-							}
-
-							nInput = nInputTmp;
-
-							break;
-						default:
-							input.bytes += DO_WRITE (input.fd, ibuf, nInput);
-							break;
-					}
-				}
-
-				snprintf (timing.str, BUFSIZ - 1, "%f %i %i %i %i\n", newtime - oldtime, n, nInput,winorig.ws_col,winorig.ws_row);
-
-				timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
-
-				nInput = 0;
-
-				oldtime = newtime;
+			if ((nOut = read (pspair.mfd, iobuf, sizeof (iobuf))) > 0) {
+				DO_WRITE (1, iobuf, nOut);
+				nOutput+=nOut;
+				script.bytes += DO_WRITE (script.fd, iobuf, nOut);
+			} else {
+				fdsbroken++;
 			}
 		}
-
 		if (FD_ISSET (0, &readfds)) {
-
-			if ((n = read (0, ibuf, sizeof (ibuf))) > 0) {
-
-
-				DO_WRITE (pspair.mfd, ibuf, n);
-				nInput = n;
+			if ((nIn = read (0, ibuf, sizeof (ibuf))) > 0) {
+				DO_WRITE (pspair.mfd, ibuf, nIn);
+				nInput += nIn;
+			} else {
+				fdsbroken++;
 			}
 		}
-	} while (n > 0);
-
-	if (timeOut != NULL) {
-		free (timeOut);
-		timeOut = NULL;
-	}
+	} while (nOutput>0 || nInput>0 || fdsbroken==0);
 
 	return result;
 }
@@ -686,7 +720,7 @@ static int process(bool blockSelect)
 static void processAndBye (int signum)
 {
 	child_dead=1;
-	process(false);
+	process();
 }
 
 static void rawmode (int ttyfd)
@@ -724,6 +758,10 @@ static void bye (int signum)
 #ifdef TCSETS
 	(void) ioctl (0, TCSETS, &termorig);
 #endif
+
+	/* write a trailer record with some info on sizes */
+	snprintf (timing.str, BUFSIZ - 1, "0 0 0 %i %i 0 %ld %ld %ld\n", winorig.ws_col,winorig.ws_row,timing.bytes,script.bytes,input.bytes);
+        timing.bytes += DO_WRITE (timing.fd, timing.str, strlen (timing.str));
 
         if (!ioctl(timing.fd, FS_IOC_GETFLAGS, &flags)) {
 		flags&=~(FS_APPEND_FL);
@@ -810,4 +848,124 @@ int do_write (int fd, char *buf, size_t size, char *file, unsigned int line)
 	}
 
 	return s;
+}
+
+void freeargv(char **argv) {
+	while(*argv) {
+		free(*argv++);
+	}
+	free(argv);
+}
+char **buildargv (char *input)
+{
+	register char *arg;
+	register char **argv;
+	char **newargv;
+	register int argc;
+	register int maxargc;
+	int argvsize=16;
+	register int squote = 0;
+	register int dquote = 0;
+	register int bsquote = 0;
+	char *copybuf;
+	argv = (char **) malloc (argvsize*sizeof(char *));
+	if (!argv) {
+		fprintf(stderr,"Cannot malloc argv\n");
+		exit(EXIT_FAILURE);
+	}
+
+
+	if (input != NULL) {
+		argc = 0;
+		maxargc = 0;
+		copybuf = alloca (strlen (input) + 1);
+		while (*input != 0) {
+			/* Pick off argv[argc] */
+			while (isspace (*input)) {
+				input++;
+			}
+			/* Check to see if argv needs expansion. */
+			if (argc+1 >= argvsize) {
+				argvsize*=2;
+				newargv=realloc(argv,argvsize*sizeof(char *));
+				if (!newargv) {
+					freeargv (argv);
+				argv = NULL;
+				break;
+			}
+			argv=newargv;
+		}
+		/* Begin scanning arg */
+		arg = copybuf;
+		while (*input != 0) {
+			if (isspace (*input) && !squote && !dquote && !bsquote) {
+				break;
+			} else {
+				if (bsquote) {
+					bsquote = 0;
+					*arg++ = *input;
+				} else if (*input == '\\') {
+					bsquote = 1;
+				} else if (squote) {
+					if (*input == '\'') {
+						squote = 0;
+					} else {
+						*arg++ = *input;
+					}
+				} else if (dquote) {
+					if (*input == '"') {
+						dquote = 0;
+					} else {
+						*arg++ = *input;
+					}
+				} else {
+					if (*input == '\'') {
+						squote = 1;
+					} else if (*input == '"') {
+						dquote = 1;
+					} else {
+						*arg++ = *input;
+					}
+				}
+			input++;
+			}
+		}
+		*arg = 0;
+		/* Add arg to argv */
+		if ((argv[argc++] = strdup (copybuf)) == NULL) {
+				freeargv (argv);
+				argv = NULL;
+				break;
+			}
+		}
+		if (argv != NULL) {
+			argv[argc] = NULL;
+		}
+	}
+	return (argv);
+}
+char *rstrchar(char *haystack, char needle)
+{
+	size_t p;
+	for (p=strlen(haystack);p>=0 && haystack[p]!=needle;p--);
+	if (p<0) {
+		return NULL;
+	} else {
+		return haystack+p+1;
+	}
+}
+char * find_allowed_command(char *cmd) {
+	char **s=sudosh_option.argallow;
+	while (*s) {
+		if (strcmp(cmd,*s)==0) {
+			return *s;
+		} else {
+			char *basecmd=rstrchar(*s,'/');
+			if (basecmd && strcmp(cmd,basecmd)==0) {
+				return *s;
+			}
+		}
+		*s++;
+	}
+	return NULL;
 }

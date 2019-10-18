@@ -159,7 +159,7 @@ int main(int argc, char **argv, char **environ)
 					"Example: how to replay a session as it was recorded.\n");
 				fprintf(stdout, "# %s ID\n", progname);
 				fprintf(stdout,
-					"Example: how to replay a session, but just echo the contains to the screen.\n");
+					"Example: how to replay a session, but just echo the contents to the screen.\n");
 				fprintf(stdout, "# %s ID 0\n\n", progname);
 				fprintf(stdout, "This is %s version %s\n", progname, VERSION);
 				fprintf(stdout, "Report bugs to <%s>\n", PACKAGE_BUGREPORT);
@@ -204,8 +204,8 @@ int main(int argc, char **argv, char **environ)
 			exit(EXIT_FAILURE);
 		}
 
-		snprintf(script,BUFSIZ-1,"%s/%s%c%s%c%s%c%ld%c%s",config_option.logdir,from,config_option.fdl,to,config_option.fdl,"script",config_option.fdl,e,config_option.fdl,randstr);
-		snprintf(time,BUFSIZ-1,"%s/%s%c%s%c%s%c%ld%c%s",config_option.logdir,from,config_option.fdl,to,config_option.fdl,"time",config_option.fdl,e,config_option.fdl,randstr);
+		snprintf(script,BUFSIZ-1,FILENAME_FORMAT,config_option.logdir,from,config_option.fdl,to,config_option.fdl,"script",config_option.fdl,e,config_option.fdl,randstr);
+		snprintf(time,BUFSIZ-1,FILENAME_FORMAT,config_option.logdir,from,config_option.fdl,to,config_option.fdl,"time",config_option.fdl,e,config_option.fdl,randstr);
 
 		div = 1.0;
 		maxwait = 0;
@@ -231,7 +231,6 @@ int main(int argc, char **argv, char **environ)
 			while ((count=fread(&buffer, 1, BUFSIZ, f_script)))
 				write2output(buffer,count);
 			fclose(f_script);
-			write2output("\r\n",2);
 
 		}
 		else
@@ -286,7 +285,7 @@ int main(int argc, char **argv, char **environ)
 
 			s->secs = 0;
 			s->e = e;
-			snprintf(s->script.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+			snprintf(s->script.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 
 			f = fopen(s->script.str, "r");
 
@@ -322,13 +321,13 @@ int main(int argc, char **argv, char **environ)
 			s->secs = 0;
 
 			if (!strcmp(type, "script"))
-				snprintf(s->script.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->script.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 
 			if (!strcmp(type, "input"))
-				snprintf(s->input.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->input.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 
 			if (!strcmp(type, "time")) {
-				snprintf(s->time.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->time.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 				count_dur(s);
 			}
 
@@ -338,7 +337,7 @@ int main(int argc, char **argv, char **environ)
 			strncpy(s->type, type, BUFSIZ - 1);
 			strncpy(s->randstr, randstr, BUFSIZ - 1);
 			strftime(s->date, 20, "%m/%d/%Y %H:%M:%S", localtime(&s->e));
-			snprintf(s->id, BUFSIZ - 1, "%s%c%s%c%ld%c%s", s->from,
+			snprintf(s->id, BUFSIZ - 1, "%.128s%c%.128s%c%ld%c%.16s", s->from,
 					 config_option.fdl, s->to, config_option.fdl, s->e,
 					 config_option.fdl, s->randstr);
 
@@ -346,13 +345,13 @@ int main(int argc, char **argv, char **environ)
 		}
 		else {
 			if (!strcmp(type, "script"))
-				snprintf(s->script.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->script.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 
 			if (!strcmp(type, "input"))
-				snprintf(s->input.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->input.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 
 			if (!strcmp(type, "time")) {
-				snprintf(s->time.str, BUFSIZ - 1, "%s/%s", config_option.logdir, dirp->d_name);
+				snprintf(s->time.str, BUFSIZ - 1, "%.2048s/%.2048s", config_option.logdir, dirp->d_name);
 				count_dur(s);
 			}
 		}
@@ -415,18 +414,35 @@ int main(int argc, char **argv, char **environ)
 
 	exit(EXIT_SUCCESS);
 }
-
+ssize_t
+write_with_retry (int fd, const void* buf, size_t size)
+{
+    ssize_t ret;
+    while (size > 0) {
+        do
+        {
+             ret = write(fd, buf, size);
+        } while ((ret < 0) && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
+        if (ret < 0)
+            return ret;
+        size -= ret;
+        buf += ret;
+    }
+    return 0;
+}
 
 void replay(const char *time, const char *script, double div, double maxwait,int xtermresize)
 {
 	char read_buffer[BUFSIZ];
 	double ftime = 0;
 	double total = 0;
-	int b = 0;
+	size_t b = 0;
 	int bInput = 0;
-	int r = 0;
+	size_t r = 0;
 	int row = 0;
 	int col = 0;
+	size_t bytestoread = 0;
+	size_t bytesread = 0;
 	struct winsize win;
 	struct winsize winorig;
 	char buffer[BUFSIZ];
@@ -463,12 +479,12 @@ void replay(const char *time, const char *script, double div, double maxwait,int
 	for (s_time.line = 1; fgets(buffer, BUFSIZ - 1, s_time.f); s_time.line++) {
 
 		/* find the five numbers */
-		if (sscanf(buffer, "%lf %i %i %i %i\n", &ftime, &b, &bInput,&col,&row) != 5) {
+		if (sscanf(buffer, "%lf %lu %i %i %i", &ftime, &b, &bInput,&col,&row) != 5) {
 		/* find the three numbers */
-			if (sscanf(buffer, "%lf %i %i\n", &ftime, &b, &bInput) != 3) {
+			if (sscanf(buffer, "%lf %lu %i", &ftime, &b, &bInput) != 3) {
 
 				/* find the two numbers (old format) */
-				if (sscanf(buffer, "%lf %i\n",&ftime , &b) != 2) {
+				if (sscanf(buffer, "%lf %lu",&ftime , &b) != 2) {
 
 					LL();
 					fprintf(stderr, "[error]: line %i: invalid timing information\n", s_time.line);
@@ -488,27 +504,27 @@ void replay(const char *time, const char *script, double div, double maxwait,int
 				printf("\033[%d;%d;%dt", 8, row, col);
 			}
 		}
+		if(b==0) continue; // do not read when we output zero
+		while (buffer[strlen(buffer)-1]!='\n' && fgets(buffer,BUFSIZ-1,s_time.f));
 
 		if (maxwait>0.0 && ftime > maxwait) {
 			ftime = maxwait;
 		} 
 		total+=ftime;
 		ftime = ftime / div;
+		if (b>BUFSIZ) {
+			bytestoread=BUFSIZ;
+		} else {
+			bytestoread=b;
+		}
+		r = read(s_script.fd, read_buffer, bytestoread);
 
-		if (b > 1024 * 1024 * 8) {	/* 8MB */
+		if (!r) {
 			LL();
-			fprintf(stderr, "[error]: line %i: wanted to read %i bytes, but the limit is 8MB.\n", s_time.line, b);
+			fprintf(stderr, "[failure]: read %lu bytes out of %lu.\n", r,bytestoread);
 			exit(EXIT_FAILURE);
 		}
-
-		memset(read_buffer, '\0', BUFSIZ);
-		r = read(s_script.fd, read_buffer, (size_t) b);
-
-		if (r != b) {
-			LL();
-			fprintf(stderr, "[failure]: read %i bytes out of %i.\n", r, b);
-			exit(EXIT_FAILURE);
-		}
+		bytesread=r;
 
 		
 		/* Add the time you want to sleep */
@@ -521,7 +537,28 @@ void replay(const char *time, const char *script, double div, double maxwait,int
 			waitforit.tv_sec++;
 		}
 		clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &waitforit, NULL);
-		fputs(read_buffer, stdout);
+		if (write_with_retry(0,read_buffer,r)<0) {
+			fprintf(stderr, "[failure]: write %lu bytes.\n", r);
+			exit(EXIT_FAILURE);
+		}
+		while(bytesread<b) {
+			bytestoread=b-bytesread;
+			if (bytestoread>BUFSIZ) {
+				bytestoread=BUFSIZ;
+			}
+			r = read(s_script.fd, read_buffer, bytestoread);
+			if (!r) {
+				LL();
+				fprintf(stderr, "[failure]: read %lu bytes out of %lu.\n", r,bytestoread);
+				exit(EXIT_FAILURE);
+			}
+			if (write_with_retry(0,read_buffer,r)<0) {
+				fprintf(stderr, "[failure]: write %lu bytes.\n", r);
+				exit(EXIT_FAILURE);
+			}
+			bytesread+=r;
+		}
+
 		fflush(stdout);
 		memset(read_buffer, '\0', BUFSIZ);
 	}
@@ -696,6 +733,8 @@ void count_dur(session * s)
 	struct s_file s_time;
 	char buffer[BUFSIZ];
 	double t_time = 0;
+	double ftime = 0;
+	size_t b = 0;
 
 	s_time.f = fopen(s->time.str, "r");
 
@@ -706,26 +745,14 @@ void count_dur(session * s)
 	}
 
 	for (s_time.line = 1; fgets(buffer, BUFSIZ - 1, s_time.f); s_time.line++) {
-
-		char time[BUFSIZ];
-		double ftime = 0;
-		int b = 0;
-
-		if (sscanf(buffer, "%s %i\n", (char *) &time, &b) != 2) {	/* find the two numbers */
+		if (sscanf(buffer, "%lf %lu", &ftime, &b) != 2) {	/* find the two numbers */
 			LL();
 			fprintf(stderr, "[error]: line %i: invalid timing information (!= %%lf %%i\\n)\n", s_time.line);
 			fclose(s_time.f);
 			exit(EXIT_FAILURE);
-		}
-
-		if (sscanf(time, "%lf", &ftime) != 1) {
-			LL();
-			fprintf(stderr, "[error]: line %i: invalid double (!= %%lf)", s_time.line);
-			fclose(s_time.f);
-			exit(EXIT_FAILURE);
-		}
-
-		t_time += ftime;
+		} else t_time += ftime;
+		// read until we have EOL in our buffer
+		while (buffer[strlen(buffer)-1]!='\n' && fgets(buffer,BUFSIZ-1,s_time.f));
 	}
 	fclose(s_time.f);
 

@@ -12,6 +12,8 @@ void parse(option * c, const char *file)
 	int leftside;
 	char key[BUFSIZ], value[BUFSIZ];
 //	char *arg, *cmt, *opt;
+	int argallowpos=0;
+	int argallowsize=0;
 	char *p;
 	struct stat defshell_stat;
 	struct stat logdir_stat;
@@ -71,9 +73,33 @@ void parse(option * c, const char *file)
 		//	fprintf(stderr, "Parsed key [%s] and value [%s]\n",key, value);
 
 		if (strcmp(key,"-cargallow")==0) {
+			if (argallowpos>=argallowsize) {
+				if (argallowsize) {
+					char **newargalloc;
+					argallowsize*=2;
+					newargalloc=(char **)realloc(c->argallow,argallowsize*sizeof(char *));
+					if (!newargalloc) {
+						fprintf(stderr,"cannot realloc argallow for %d\n",argallowsize);
+						exit(EXIT_FAILURE);
+					}
+					c->argallow=newargalloc;
+				} else {
+					argallowsize=16;
+					c->argallow=(char **)malloc(argallowsize*sizeof(char *));
+					if (!c->argallow) {
+						fprintf(stderr,"cannot malloc argallow for %d\n",argallowsize);
+						exit(EXIT_FAILURE);
+					}
+				}
+			}
+			c->argallow[argallowpos++]=strdup(value);
+			c->argallow[argallowpos]=NULL;
+/*			argallowpos++;
+
 			strcat(c->argallow,"$");
 			strcat(c->argallow,value);
 			strcat(c->argallow,"$");
+			*/
 		}
 
 		if (strcmp(key,"logdir")==0)
