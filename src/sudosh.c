@@ -587,14 +587,12 @@ static void prepchild (struct pst *pst, char ttyFather[BUFSIZ],char *cmd,char **
 		if (cmd) {
 //			execl ("/bin/sh", "sh", "-c", c_command,	(char *) 0);
 			ret=execvpe(cmd,args,env);
-			freeargv(args);
 		} else {
 			ret=execl (user.shell.ptr, b, (char *) 0);
 		}
 	else if (cmd) {
 //			execle ("/bin/sh", "sh", "-c", c_command,	(char *) 0,env_list);
 			ret=execvpe(cmd,args,env_list);
-			freeargv(args);
 		} else {
 			ret=execle (user.shell.ptr, b, (char *) 0, env_list);
 		}
@@ -622,8 +620,8 @@ static int process()
 	n=0;
 	int oldcols=-1;
 	int oldrows=-1;
-	size_t nOut=0;
-	size_t nIn=0;
+	int nOut=0;
+	int nIn=0;
 	int fdsbroken=0;
 	fd_set readfds;
 	do {
